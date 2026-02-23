@@ -69,6 +69,7 @@ def recompute_form_for_user(db: Session, user_id: int) -> None:
                 ctl=p["ctl"],
                 tsb=p["tsb"],
                 load_state=p["load_state"],
+                load_color=p["load_color"],
             )
         )
 
@@ -168,7 +169,14 @@ def get_user_form(auth: AuthContext = Depends(get_current_user), db: Session = D
     return FormResponse(
         user_id=auth.user.id,
         points=[
-            FormPointRead(date=p.point_date, atl=p.atl, ctl=p.ctl, tsb=p.tsb, load_state=p.load_state)
+            FormPointRead(
+                date=p.point_date,
+                atl=p.atl,
+                ctl=p.ctl,
+                tsb=p.tsb,
+                load_state=p.load_state,
+                load_color=p.load_color,
+            )
             for p in points
         ],
     )

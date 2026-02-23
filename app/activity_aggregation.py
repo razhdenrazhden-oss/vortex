@@ -15,6 +15,16 @@ def load_state_from_tsb(tsb: float) -> str:
     return "detraining"
 
 
+def load_color_from_state(state: str) -> str:
+    palette = {
+        "overreaching": "#f97316",
+        "progress": "#22c55e",
+        "maintaining": "#3b82f6",
+        "detraining": "#9ca3af",
+    }
+    return palette.get(state, "#3b82f6")
+
+
 def classify_workout(distance_km: float, avg_power_w: float | None, duration_min: float) -> str:
     if avg_power_w and avg_power_w >= 260:
         return "power"
@@ -35,13 +45,15 @@ def recompute_form_points(activities_by_day: dict[date, float], start: date, end
         atl = atl + (day_load - atl) / 7
         ctl = ctl + (day_load - ctl) / 42
         tsb = ctl - atl
+        state = load_state_from_tsb(tsb)
         points.append(
             {
                 "date": current,
                 "atl": round(atl, 2),
                 "ctl": round(ctl, 2),
                 "tsb": round(tsb, 2),
-                "load_state": load_state_from_tsb(tsb),
+                "load_state": state,
+                "load_color": load_color_from_state(state),
             }
         )
         current += timedelta(days=1)

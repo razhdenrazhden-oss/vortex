@@ -151,6 +151,7 @@ class FormPointRead(BaseModel):
     ctl: float
     tsb: float
     load_state: str
+    load_color: str
 
 
 class FormResponse(BaseModel):

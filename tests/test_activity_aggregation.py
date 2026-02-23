@@ -31,4 +31,4 @@ def test_recompute_form_points_returns_year_series_shape():
     points = recompute_form_points({date(2026, 1, 1): 100.0}, start=date(2026, 1, 1), end=date(2026, 1, 3))
     assert len(points) == 3
     assert points[0]["date"].isoformat() == "2026-01-01"
-    assert {"atl", "ctl", "tsb", "load_state"}.issubset(points[0].keys())
+    assert {"atl", "ctl", "tsb", "load_state", "load_color"}.issubset(points[0].keys())

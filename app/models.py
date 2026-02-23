@@ -124,4 +124,5 @@ class FormPoint(Base):
     ctl: Mapped[float] = mapped_column(Float, nullable=False)
     tsb: Mapped[float] = mapped_column(Float, nullable=False)
     load_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    load_color: Mapped[str] = mapped_column(String(16), nullable=False, default="#3b82f6")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
