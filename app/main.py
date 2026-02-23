@@ -7,12 +7,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.calculations import calculate_metrics
+from app.cardio_analytics import CardioInput, cardio_recommendations, cardio_risk_level, compute_cardio_score
 from app.daily_status import readiness_from_tsb, upsert_daily_status
 from app.database import SessionLocal, engine
 from app.models import Base, Biometrics, DailyMetrics, DailyStatus, User, Workout
 from app.schemas import (
     BiometricsCreate,
     BiometricsRead,
+    CardioAnalyticsRead,
     DailyMetricsRead,
     DailyStatusRead,
     DashboardRead,
@@ -350,6 +352,56 @@ def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
         latest_status=latest_status,
         last_workout=last_workout,
         latest_biometrics=latest_biometrics,
+    )
+
+
+@app.get("/users/{user_id}/cardio-analytics", response_model=CardioAnalyticsRead)
+def get_cardio_analytics(
+    user_id: int,
+    days: int = Query(default=14, ge=1, le=90),
+    db: Session = Depends(get_db),
+) -> CardioAnalyticsRead:
+    _get_existing_user(db, user_id)
+
+    avg_readiness, avg_tsb = db.execute(
+        select(
+            func.avg(DailyStatus.readiness_score),
+            func.avg(DailyStatus.tsb),
+        ).where(
+            DailyStatus.user_id == user_id,
+            DailyStatus.status_date >= date.today() - timedelta(days=days - 1),
+        )
+    ).one()
+
+    latest_biometrics = db.scalar(
+        select(Biometrics)
+        .where(Biometrics.user_id == user_id)
+        .order_by(Biometrics.entry_date.desc(), Biometrics.created_at.desc())
+        .limit(1)
+    )
+
+    data = CardioInput(
+        avg_readiness=float(avg_readiness) if avg_readiness is not None else None,
+        avg_tsb=float(avg_tsb) if avg_tsb is not None else None,
+        hr=latest_biometrics.hr if latest_biometrics else None,
+        lactate=latest_biometrics.lactate if latest_biometrics else None,
+        glucose=latest_biometrics.glucose if latest_biometrics else None,
+        steps=latest_biometrics.steps if latest_biometrics else None,
+    )
+
+    score = compute_cardio_score(data)
+    return CardioAnalyticsRead(
+        user_id=user_id,
+        period_days=days,
+        cardio_score=score,
+        risk_level=cardio_risk_level(score),
+        avg_readiness=data.avg_readiness,
+        avg_tsb=data.avg_tsb,
+        latest_hr=data.hr,
+        latest_lactate=data.lactate,
+        latest_glucose=data.glucose,
+        latest_steps=data.steps,
+        recommendations=cardio_recommendations(data, score),
     )
 
 

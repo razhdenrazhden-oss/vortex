@@ -79,6 +79,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Возвращает последние user-scoped данные: workout, metric, daily_status, biometrics.
 
+### Heart & Cardiovascular Analytics (optional)
+- `GET /users/{id}/cardio-analytics?days=14`
+
+Возвращает cardio score, risk level и рекомендации на основе дневного статуса и последних биометрических данных.
+
 При добавлении/обновлении/удалении тренировки статусы и метрики пересчитываются в user-scope с учётом rest days.
 
 ### Biometrics

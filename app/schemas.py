@@ -104,3 +104,17 @@ class DashboardRead(BaseModel):
     latest_status: DailyStatusRead | None
     last_workout: WorkoutRead | None
     latest_biometrics: BiometricsRead | None
+
+
+class CardioAnalyticsRead(BaseModel):
+    user_id: int
+    period_days: int
+    cardio_score: float
+    risk_level: str
+    avg_readiness: float | None
+    avg_tsb: float | None
+    latest_hr: float | None
+    latest_lactate: float | None
+    latest_glucose: float | None
+    latest_steps: float | None
+    recommendations: list[str]
