@@ -153,8 +153,8 @@ Load-state colors for frontend:
 - **Type:** Web Service
 - **Runtime:** Python
 - **Python version:** `3.11`
-- **Build Command:** `python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt`
-- **Start Command:** `python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}`
+- **Build Command:** `python -m pip install -r requirements.txt`
+- **Start Command:** `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 Repository already contains ready-to-use Render config: **`.render.yaml`**.
 
@@ -183,7 +183,7 @@ Add these in **Render → Service → Environment**:
 ### 4) Daily refresh (optional cron)
 - В `.render.yaml` добавлен пример `cronJobs` для ежедневного обновления.
 - Cron вызывает `POST /update-data`, который запускает дневной sync/recompute.
-- В `cronJobs.startCommand` используется `python3 scripts_render_sync.py` (без `curl` и без inline shell), чтобы убрать риски `status 127` из-за resolution/quoting проблем.
+- В `cronJobs.startCommand` используется `python scripts_render_sync.py` (без `curl` и без inline shell), чтобы убрать риски `status 127` из-за resolution/quoting проблем.
 - Если endpoint закрыт сетью, используйте внутренний cron worker или private network call.
 
 ### 5) Post-deploy API checks
@@ -218,6 +218,7 @@ curl -X POST https://<your-render-domain>/update-data
 
 
 ### Quick check for `127` on Render
+- Без `&&` и `${PORT:-...}` в командах: только простые `python -m ...` для предсказуемого выполнения.
 - Убедитесь, что в UI Render **Build/Start Command** совпадают с `.render.yaml` (Blueprint).
 - Если сервис создан вручную раньше, нажмите **Manual Deploy → Clear build cache & deploy**.
 - Проверьте, что в логах ошибка именно `command not found` и какая команда не найдена.

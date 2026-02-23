@@ -4,8 +4,8 @@ services:
     runtime: python
     plan: starter
     rootDir: .
-    buildCommand: python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt
-    startCommand: python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -35,5 +35,5 @@ cronJobs:
     schedule: "0 3 * * *"
     env: python
     plan: starter
-    buildCommand: python3 -m pip install --upgrade pip && python3 -m pip install -r requirements.txt
-    startCommand: python3 scripts_render_sync.py
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python scripts_render_sync.py
