@@ -82,3 +82,46 @@ class HeartStatus(Base):
     cardio_risk_level: Mapped[str] = mapped_column(String(32), nullable=False)
     recommendations: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class UserToken(Base):
+    __tablename__ = "user_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    access_token: Mapped[str] = mapped_column(String(2048), nullable=False)
+    refresh_token: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class ExternalActivity(Base):
+    __tablename__ = "external_activities"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    source_activity_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    activity_date: Mapped[Date] = mapped_column(Date, nullable=False, index=True)
+    hr_bpm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    power_w: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    duration_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    elevation_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    workout_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class FormPoint(Base):
+    __tablename__ = "form_points"
+    __table_args__ = (UniqueConstraint("user_id", "point_date", name="uq_form_points_user_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    point_date: Mapped[Date] = mapped_column(Date, nullable=False, index=True)
+    atl: Mapped[float] = mapped_column(Float, nullable=False)
+    ctl: Mapped[float] = mapped_column(Float, nullable=False)
+    tsb: Mapped[float] = mapped_column(Float, nullable=False)
+    load_state: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.calculations import calculate_metrics
 from app.cardio_analytics import CardioInput, cardio_recommendations, cardio_risk_level, compute_cardio_score
 from app.daily_status import readiness_from_tsb, upsert_daily_status
+from app.external_api import router as external_router, recompute_form_for_user
 from app.database import SessionLocal, engine
 from app.heart_analytics import HeartInput, determine_cardio_risk, heart_recommendations
 from app.models import Base, Biometrics, DailyMetrics, DailyStatus, HeartStatus, User, Workout
@@ -27,7 +28,8 @@ from app.schemas import (
     WorkoutUpdate,
 )
 
-app = FastAPI(title="Activity Load Tracker API", version="0.7.0")
+app = FastAPI(title="Activity Load Tracker API", version="0.8.0")
+app.include_router(external_router)
 
 
 @app.on_event("startup")
@@ -514,3 +516,13 @@ def create_biometrics(payload: BiometricsCreate, db: Session = Depends(get_db)) 
     except Exception:
         db.rollback()
         raise
+
+
+@app.post("/internal/sync-daily")
+def sync_daily_job(db: Session = Depends(get_db)) -> dict[str, int]:
+    """Cron entrypoint: recompute form datasets once per day."""
+    user_ids = [u.id for u in db.query(User.id).all()]
+    for uid in user_ids:
+        recompute_form_for_user(db, uid)
+    db.commit()
+    return {"processed_users": len(user_ids)}

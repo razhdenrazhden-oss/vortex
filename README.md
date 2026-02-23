@@ -116,3 +116,32 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
   - `high`, если `TSB <= -20`
   - `moderate`, если `-20 < TSB <= -5`
   - `low`, если `TSB > -5`
+
+
+## External Integrations MVP (Strava / Intervals / GPX)
+
+Added backend skeleton endpoints for ingestion + frontend-ready form data:
+
+- `GET /auth/strava` – returns OAuth2 authorization URL
+- `GET /auth/strava/callback?code=...` – OAuth2 code exchange skeleton and token storage
+- `POST /auth/intervals` – save Intervals.icu API token
+- `GET /user/activities?start_date=&end_date=` – user activities in normalized units
+- `GET /user/form` – ATL/CTL/TSB yearly series for charts (`date, atl, ctl, tsb, load_state`)
+- `POST /user/upload-gpx` – GPX upload/import skeleton
+- `POST /internal/sync-daily` – cron-style daily recompute trigger
+
+Auth model:
+- Endpoints require bearer token (Supabase JWT via `SUPABASE_JWT_SECRET`).
+- Dev fallback supported: `Authorization: Bearer dev-<external_auth_id>`.
+
+Normalized units:
+- HR: bpm
+- Power: watts
+- Distance: km
+- Duration: min
+
+Load-state colors for frontend:
+- `overreaching` (orange)
+- `progress` (green)
+- `maintaining` (blue)
+- `detraining` (gray)

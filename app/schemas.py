@@ -130,3 +130,37 @@ class CardioAnalyticsRead(BaseModel):
     latest_glucose: float | None
     latest_steps: float | None
     recommendations: list[str]
+
+
+class ActivityRead(BaseModel):
+    activity_date: date
+    source: str
+    hr_bpm: float | None
+    power_w: float | None
+    distance_km: float
+    duration_min: float
+    elevation_m: float | None
+    workout_type: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class FormPointRead(BaseModel):
+    date: date
+    atl: float
+    ctl: float
+    tsb: float
+    load_state: str
+
+
+class FormResponse(BaseModel):
+    user_id: int
+    points: list[FormPointRead]
+
+
+class OAuthStartResponse(BaseModel):
+    authorization_url: str
+
+
+class OAuthTokenInput(BaseModel):
+    api_token: str = Field(min_length=8)
