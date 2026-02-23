@@ -167,6 +167,7 @@ Add these in **Render → Service → Environment**:
 - `DATABASE_URL` = `<supabase-postgres-connection-url>`
 - `DB_SSLMODE` = `require`
 - `STARTUP_DB_INIT` = `false` (recommended on Render; prevents startup crash if DB is temporarily unavailable)
+- `ENABLE_DAILY_SYNC_LOOP` = `false` (recommended on Render; rely on cron endpoint `/update-data` instead of in-process loop)
 - `STRAVA_CLIENT_ID` = `<strava-client-id>`
 - `STRAVA_CLIENT_SECRET` = `<strava-client-secret>`
 - `STRAVA_REDIRECT_URI` = `https://<your-render-domain>/auth/strava/callback`
@@ -235,3 +236,6 @@ curl -X POST https://<your-render-domain>/update-data
 
 
 > Примечание: автосоздание таблиц на startup теперь отключено по умолчанию (`STARTUP_DB_INIT=false`) для устойчивого старта на Render.
+
+
+> Примечание: чтобы снизить риск `502` при старте в разных рантаймах (uvicorn/gunicorn), background-loop по умолчанию отключён (`ENABLE_DAILY_SYNC_LOOP=false`). Ежедневное обновление выполняется через cron endpoint `/update-data`.

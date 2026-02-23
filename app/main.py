@@ -45,7 +45,17 @@ def startup() -> None:
             Base.metadata.create_all(bind=engine)
         except Exception as exc:  # noqa: BLE001
             logger.exception("Startup DB init failed; continuing without schema auto-create: %s", exc)
-    asyncio.get_event_loop().create_task(_daily_sync_loop())
+
+    enable_sync_loop = os.getenv("ENABLE_DAILY_SYNC_LOOP", "false").lower() in {"1", "true", "yes"}
+    if not enable_sync_loop:
+        logger.info("Daily sync loop disabled (ENABLE_DAILY_SYNC_LOOP=false)")
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_daily_sync_loop())
+    except RuntimeError:
+        logger.warning("No running event loop on startup; skipping background daily sync loop")
 
 
 
