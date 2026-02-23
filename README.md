@@ -52,6 +52,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ### Workouts
 - `POST /workouts`
+- `PUT /workouts/{workout_id}`
+- `DELETE /workouts/{workout_id}`
 - `GET /workouts?user_id=1&start=2026-01-01&end=2026-01-31`
 
 `POST /workouts`:
@@ -76,6 +78,8 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `GET /users/{id}/dashboard`
 
 Возвращает последние user-scoped данные: workout, metric, daily_status, biometrics.
+
+При добавлении/обновлении/удалении тренировки статусы и метрики пересчитываются в user-scope с учётом rest days.
 
 ### Biometrics
 - `POST /biometrics`

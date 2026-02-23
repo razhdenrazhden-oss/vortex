@@ -112,3 +112,40 @@ def test_dashboard_workouts_and_biometrics_endpoints(client: TestClient):
     body = dashboard.json()
     assert body["latest_status"] is not None
     assert body["latest_biometrics"] is not None
+
+
+def test_workout_update_recomputes_status(client: TestClient):
+    user_id = _create_user(client, "auth_update")
+    w = client.post("/workouts", json={"user_id": user_id, "workout_date": "2026-01-01", "tss": 100})
+    assert w.status_code == 201
+    wid = w.json()["id"]
+
+    u = client.put(f"/workouts/{wid}", json={"tss": 30})
+    assert u.status_code == 200
+
+    status = client.get("/daily-status", params={"user_id": user_id, "start": "2026-01-01", "end": "2026-01-01"})
+    assert status.status_code == 200
+    assert len(status.json()) == 1
+    assert status.json()[0]["readiness_score"] >= 0
+
+
+def test_workout_delete_recomputes_and_cleans_when_last_removed(client: TestClient):
+    user_id = _create_user(client, "auth_delete")
+    w1 = client.post("/workouts", json={"user_id": user_id, "workout_date": "2026-01-01", "tss": 60})
+    w2 = client.post("/workouts", json={"user_id": user_id, "workout_date": "2026-01-03", "tss": 30})
+    assert w1.status_code == 201 and w2.status_code == 201
+
+    d1 = client.delete(f"/workouts/{w1.json()['id']}")
+    assert d1.status_code == 204
+
+    status_after_first = client.get("/daily-status", params={"user_id": user_id})
+    assert status_after_first.status_code == 200
+    assert len(status_after_first.json()) >= 1
+
+    d2 = client.delete(f"/workouts/{w2.json()['id']}")
+    assert d2.status_code == 204
+
+    metrics = client.get("/metrics", params={"user_id": user_id})
+    statuses = client.get("/daily-status", params={"user_id": user_id})
+    assert metrics.status_code == 200 and metrics.json() == []
+    assert statuses.status_code == 200 and statuses.json() == []

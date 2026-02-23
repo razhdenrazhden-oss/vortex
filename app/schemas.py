@@ -25,6 +25,19 @@ class WorkoutCreate(BaseModel):
     tss: float = Field(gt=0, description="Training Stress Score")
 
 
+
+
+class WorkoutUpdate(BaseModel):
+    tss: float | None = Field(default=None, gt=0, description="Training Stress Score")
+    workout_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_any_field_present(self) -> "WorkoutUpdate":
+        if self.tss is None and self.workout_date is None:
+            raise ValueError("At least one field must be provided")
+        return self
+
+
 class WorkoutRead(BaseModel):
     id: int
     user_id: int

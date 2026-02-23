@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.calculations import calculate_metrics
+from app.daily_status import readiness_from_tsb, upsert_daily_status
 from app.database import SessionLocal, engine
 from app.models import Base, Biometrics, DailyMetrics, DailyStatus, User, Workout
 from app.schemas import (
@@ -19,9 +20,10 @@ from app.schemas import (
     UserRead,
     WorkoutCreate,
     WorkoutRead,
+    WorkoutUpdate,
 )
 
-app = FastAPI(title="Activity Load Tracker API", version="0.5.0")
+app = FastAPI(title="Activity Load Tracker API", version="0.6.0")
 
 
 @app.on_event("startup")
@@ -44,14 +46,6 @@ def _iter_days(start: date, end: date) -> Generator[date, None, None]:
         current += timedelta(days=1)
 
 
-def _fatigue_level_from_tsb(tsb: float) -> str:
-    if tsb <= -20:
-        return "high"
-    if tsb <= -5:
-        return "moderate"
-    return "low"
-
-
 def _get_existing_user(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
     if user is None:
@@ -59,11 +53,15 @@ def _get_existing_user(db: Session, user_id: int) -> User:
     return user
 
 
+def _get_existing_workout(db: Session, workout_id: int) -> Workout:
+    workout = db.get(Workout, workout_id)
+    if workout is None:
+        raise HTTPException(status_code=404, detail="Workout not found")
+    return workout
+
+
 def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
-    """
-    Keep PR#2 behavior: continuous daily recomputation including rest days.
-    Fully user-scoped for SaaS isolation.
-    """
+    """Continuous, rest-day inclusive, user-scoped recomputation."""
     latest_workout_date = db.scalar(select(func.max(Workout.workout_date)).where(Workout.user_id == user_id))
     if latest_workout_date is None:
         return
@@ -77,16 +75,18 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
     prev_atl = prior_metric.atl if prior_metric else 0.0
     prev_ctl = prior_metric.ctl if prior_metric else 0.0
 
-    day_tss_rows = db.execute(
-        select(Workout.workout_date, func.sum(Workout.tss))
-        .where(
-            Workout.user_id == user_id,
-            Workout.workout_date >= from_date,
-            Workout.workout_date <= latest_workout_date,
-        )
-        .group_by(Workout.workout_date)
-    ).all()
-    day_tss_map = {row[0]: float(row[1]) for row in day_tss_rows}
+    day_tss_map = {
+        row[0]: float(row[1])
+        for row in db.execute(
+            select(Workout.workout_date, func.sum(Workout.tss))
+            .where(
+                Workout.user_id == user_id,
+                Workout.workout_date >= from_date,
+                Workout.workout_date <= latest_workout_date,
+            )
+            .group_by(Workout.workout_date)
+        ).all()
+    }
 
     existing_metrics_by_date = {
         metric.metric_date: metric
@@ -111,8 +111,8 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
 
     for metric_day in _iter_days(from_date, latest_workout_date):
         day_tss = day_tss_map.get(metric_day, 0.0)
-        atl, ctl, tsb, readiness = calculate_metrics(prev_atl=prev_atl, prev_ctl=prev_ctl, today_tss=day_tss)
-        fatigue_level = _fatigue_level_from_tsb(tsb)
+        atl, ctl, tsb, _ = calculate_metrics(prev_atl=prev_atl, prev_ctl=prev_ctl, today_tss=day_tss)
+        readiness = readiness_from_tsb(tsb)
 
         metric = existing_metrics_by_date.get(metric_day)
         if metric:
@@ -134,21 +134,15 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
                 )
             )
 
-        status = existing_status_by_date.get(metric_day)
-        if status:
-            status.readiness_score = readiness
-            status.tsb = tsb
-            status.fatigue_level = fatigue_level
-        else:
-            db.add(
-                DailyStatus(
-                    user_id=user_id,
-                    status_date=metric_day,
-                    readiness_score=readiness,
-                    fatigue_level=fatigue_level,
-                    tsb=tsb,
-                )
-            )
+        status = upsert_daily_status(
+            existing_status_by_date.get(metric_day),
+            user_id=user_id,
+            status_date=metric_day,
+            readiness_score=readiness,
+            tsb=tsb,
+        )
+        if status.id is None:
+            db.add(status)
 
         prev_atl, prev_ctl = atl, ctl
 
@@ -191,6 +185,54 @@ def create_workout(payload: WorkoutCreate, db: Session = Depends(get_db)) -> Wor
         db.commit()
         db.refresh(workout)
         return workout
+    except Exception:
+        db.rollback()
+        raise
+
+
+@app.put("/workouts/{workout_id}", response_model=WorkoutRead)
+def update_workout(workout_id: int, payload: WorkoutUpdate, db: Session = Depends(get_db)) -> Workout:
+    workout = _get_existing_workout(db, workout_id)
+    _get_existing_user(db, workout.user_id)
+
+    original_date = workout.workout_date
+    try:
+        if payload.tss is not None:
+            workout.tss = payload.tss
+        if payload.workout_date is not None:
+            workout.workout_date = payload.workout_date
+
+        recompute_from = min(original_date, workout.workout_date)
+        recompute_metrics_from(db=db, user_id=workout.user_id, from_date=recompute_from)
+        db.commit()
+        db.refresh(workout)
+        return workout
+    except Exception:
+        db.rollback()
+        raise
+
+
+@app.delete("/workouts/{workout_id}", status_code=204)
+def delete_workout(workout_id: int, db: Session = Depends(get_db)) -> None:
+    workout = _get_existing_workout(db, workout_id)
+    _get_existing_user(db, workout.user_id)
+
+    recompute_from = workout.workout_date
+    user_id = workout.user_id
+
+    try:
+        db.delete(workout)
+        db.flush()
+
+        has_workouts = db.scalar(select(func.count(Workout.id)).where(Workout.user_id == user_id)) or 0
+        if has_workouts > 0:
+            recompute_metrics_from(db=db, user_id=user_id, from_date=recompute_from)
+        else:
+            db.query(DailyMetrics).filter(DailyMetrics.user_id == user_id).delete()
+            db.query(DailyStatus).filter(DailyStatus.user_id == user_id).delete()
+
+        db.commit()
+        return None
     except Exception:
         db.rollback()
         raise
