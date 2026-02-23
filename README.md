@@ -183,6 +183,7 @@ Add these in **Render → Service → Environment**:
 ### 4) Daily refresh (optional cron)
 - В `.render.yaml` добавлен пример `cronJobs` для ежедневного обновления.
 - Cron вызывает `POST /update-data`, который запускает дневной sync/recompute.
+- В `cronJobs.startCommand` используется `python -c` + `urllib` (без `curl`), чтобы избежать Render error `127` (command not found).
 - Если endpoint закрыт сетью, используйте внутренний cron worker или private network call.
 
 ### 5) Post-deploy API checks

@@ -34,4 +34,7 @@ cronJobs:
     env: python
     plan: starter
     buildCommand: pip install -r requirements.txt
-    startCommand: "curl -X POST $RENDER_EXTERNAL_URL/update-data"
+    startCommand: >-
+      python -c "import os,urllib.request;url=(os.environ.get('RENDER_EXTERNAL_URL','').rstrip('/')+'/update-data');
+      req=urllib.request.Request(url, method='POST');
+      print(urllib.request.urlopen(req, timeout=30).read().decode())"
