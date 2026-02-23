@@ -218,6 +218,7 @@ curl -X POST https://<your-render-domain>/update-data
 
 
 ### Quick check for `127` on Render
+- Если в логах видите `Running 'gunicorn your_application.wsgi'` и `gunicorn: command not found`, значит Render использует дефолтный Start Command. Пропишите вручную: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` и сделайте redeploy.
 - Без `&&` и `${PORT:-...}` в командах: только простые `python -m ...` для предсказуемого выполнения.
 - Убедитесь, что в UI Render **Build/Start Command** совпадают с `.render.yaml` (Blueprint).
 - Если сервис создан вручную раньше, нажмите **Manual Deploy → Clear build cache & deploy**.
