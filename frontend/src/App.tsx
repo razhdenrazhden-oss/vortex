@@ -8,12 +8,12 @@ import PlannedWorkoutCard from './components/PlannedWorkoutCard';
 import RecommendationCard from './components/RecommendationCard';
 import StatusCard from './components/StatusCard';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
-import type { LoadPoint, Recommendation, RecommendationType, StatusKind, WeeklyLoad, WorkoutPlan } from './types';
+import type { HeartAlert, LoadPoint, Recommendation, RecommendationType, StatusKind, WeeklyLoad, WorkoutPlan } from './types';
 
 const mockWorkouts: WorkoutPlan[] = [
-  { id: '1', date: '2026-02-03', distanceKm: 42, elevationM: 480, workoutType: 'endurance' },
-  { id: '2', date: '2026-02-09', distanceKm: 28, elevationM: 250, workoutType: 'recovery' },
-  { id: '3', date: '2026-02-14', distanceKm: 65, elevationM: 920, workoutType: 'interval' }
+  { id: '1', date: '2026-02-03', distanceKm: 42, elevationM: 480, workoutType: 'endurance', route_provider: 'Komoot', external_url: 'https://www.komoot.com/' },
+  { id: '2', date: '2026-02-09', distanceKm: 28, elevationM: 250, workoutType: 'recovery', route_provider: 'Strava', external_url: 'https://www.strava.com/' },
+  { id: '3', date: '2026-02-14', distanceKm: 65, elevationM: 920, workoutType: 'interval', route_provider: 'Garmin', external_url: 'https://connect.garmin.com/' }
 ];
 
 const mockLoad: LoadPoint[] = Array.from({ length: 10 }).map((_, i) => ({
@@ -66,7 +66,7 @@ export default function App() {
 
     Promise.all([fetchDailyStatus(userId), fetchHeartStatus(userId)])
       .then(([status, heart]) => {
-        const latest = status.at(-1);
+        const latest = status.length ? status[status.length - 1] : undefined;
         if (latest) {
           setFormScore(latest.readiness_score);
           setStatusKind(
@@ -91,6 +91,12 @@ export default function App() {
   );
 
   const irregularHeartPattern = heartSeries.some((p) => p.hr > 70 || p.hrv < 45);
+
+  const heartAlert: HeartAlert = {
+    show: irregularHeartPattern,
+    title: 'Irregular pattern detected',
+    message: 'Consider medical evaluation if this persists'
+  };
 
   const tabIndex = tabs.indexOf(activeTab);
   const swipe = useSwipeTabs(
@@ -117,7 +123,7 @@ export default function App() {
       {activeTab === 'dashboard' && (
         <section className="space-y-4">
           <StatusCard score={formScore} status={statusKind} />
-          <HeartCard points={heartSeries} irregular={irregularHeartPattern} />
+          <HeartCard points={heartSeries} irregular={irregularHeartPattern} alert={heartAlert} />
 
           <div className="card">
             <div className="mb-2 flex items-center justify-between">
@@ -163,7 +169,8 @@ export default function App() {
             user_id: userId,
             entry_date: new Date().toISOString().slice(0, 10),
             hr: payload.hr,
-            lactate: payload.lactate
+            lactate: payload.lactate,
+            power: payload.power
           });
         }}
       />

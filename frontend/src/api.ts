@@ -21,6 +21,7 @@ export async function postManualBiometrics(input: {
   hr?: number;
   hrv?: number;
   lactate?: number;
+  power?: number;
 }) {
   await api.post('/biometrics', input);
 }
