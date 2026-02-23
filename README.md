@@ -153,8 +153,8 @@ Load-state colors for frontend:
 - **Type:** Web Service
 - **Runtime:** Python
 - **Python version:** `3.11`
-- **Build Command:** `pip install -r requirements.txt`
-- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Build Command:** `/usr/bin/env python -m pip install -r requirements.txt`
+- **Start Command:** `/usr/bin/env python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 Repository already contains ready-to-use Render config: **`.render.yaml`**.
 
@@ -183,7 +183,7 @@ Add these in **Render → Service → Environment**:
 ### 4) Daily refresh (optional cron)
 - В `.render.yaml` добавлен пример `cronJobs` для ежедневного обновления.
 - Cron вызывает `POST /update-data`, который запускает дневной sync/recompute.
-- В `cronJobs.startCommand` используется `python3 -c` + `urllib` (без `curl`), чтобы избежать Render error `127` (command not found).
+- В `cronJobs.startCommand` используется `/usr/bin/env python -c` + `urllib` (без `curl`), чтобы избежать Render error `127` (command not found).
 - Если endpoint закрыт сетью, используйте внутренний cron worker или private network call.
 
 ### 5) Post-deploy API checks
@@ -211,3 +211,6 @@ curl -H "Authorization: Bearer <supabase-jwt-or-dev-token>"   https://<your-rend
 ```bash
 curl -X POST https://<your-render-domain>/update-data
 ```
+
+
+> Если ошибка `127` повторяется, проверьте в Render Dashboard, что Service/Job используют именно команды из `.render.yaml` (без legacy `uvicorn`/`curl`), и перезапустите deploy.
