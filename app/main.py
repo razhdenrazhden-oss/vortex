@@ -64,7 +64,20 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
     """Continuous, rest-day inclusive, user-scoped recomputation."""
     latest_workout_date = db.scalar(select(func.max(Workout.workout_date)).where(Workout.user_id == user_id))
     if latest_workout_date is None:
+        # No workouts left -> remove all derived rows for this user.
+        db.query(DailyMetrics).filter(DailyMetrics.user_id == user_id).delete()
+        db.query(DailyStatus).filter(DailyStatus.user_id == user_id).delete()
         return
+
+    # Trim stale tail after a workout update/delete if latest date moved earlier.
+    db.query(DailyMetrics).filter(
+        DailyMetrics.user_id == user_id,
+        DailyMetrics.metric_date > latest_workout_date,
+    ).delete()
+    db.query(DailyStatus).filter(
+        DailyStatus.user_id == user_id,
+        DailyStatus.status_date > latest_workout_date,
+    ).delete()
 
     prior_metric = db.scalar(
         select(DailyMetrics)
@@ -224,12 +237,7 @@ def delete_workout(workout_id: int, db: Session = Depends(get_db)) -> None:
         db.delete(workout)
         db.flush()
 
-        has_workouts = db.scalar(select(func.count(Workout.id)).where(Workout.user_id == user_id)) or 0
-        if has_workouts > 0:
-            recompute_metrics_from(db=db, user_id=user_id, from_date=recompute_from)
-        else:
-            db.query(DailyMetrics).filter(DailyMetrics.user_id == user_id).delete()
-            db.query(DailyStatus).filter(DailyStatus.user_id == user_id).delete()
+        recompute_metrics_from(db=db, user_id=user_id, from_date=recompute_from)
 
         db.commit()
         return None
