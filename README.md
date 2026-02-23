@@ -218,8 +218,16 @@ curl -X POST https://<your-render-domain>/update-data
 
 
 ### Quick check for `127` on Render
+- Добавлен fallback-модуль `your_application/wsgi.py`, чтобы даже при дефолтном `gunicorn your_application.wsgi` поднимался FastAPI через WSGI-адаптер.
+- Добавлен `runtime.txt` (`python-3.11.9`) для хостингов, которые читают версию Python из `runtime.txt`.
 - Если в логах видите `Running 'gunicorn your_application.wsgi'` и `gunicorn: command not found`, значит Render использует дефолтный Start Command. Пропишите вручную: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` и сделайте redeploy.
 - Без `&&` и `${PORT:-...}` в командах: только простые `python -m ...` для предсказуемого выполнения.
 - Убедитесь, что в UI Render **Build/Start Command** совпадают с `.render.yaml` (Blueprint).
 - Если сервис создан вручную раньше, нажмите **Manual Deploy → Clear build cache & deploy**.
 - Проверьте, что в логах ошибка именно `command not found` и какая команда не найдена.
+
+
+### If you see `ModuleNotFoundError: No module named 'your_application'`
+- This means Render launched default `gunicorn your_application.wsgi`.
+- Repo now includes `your_application/wsgi.py` with `application` callable, so redeploy should boot correctly.
+- If still failing, clear build cache and verify latest commit is deployed.
