@@ -7,10 +7,18 @@ from sqlalchemy.orm import Session
 
 from app.calculations import calculate_metrics
 from app.database import SessionLocal, engine
-from app.models import Base, DailyMetrics, User, Workout
-from app.schemas import DailyMetricsRead, WorkoutCreate, WorkoutRead
+from app.models import Base, Biometrics, DailyMetrics, DailyStatus, User, Workout
+from app.schemas import (
+    BiometricsCreate,
+    BiometricsRead,
+    DailyMetricsRead,
+    DailyStatusRead,
+    DashboardRead,
+    WorkoutCreate,
+    WorkoutRead,
+)
 
-app = FastAPI(title="Activity Load Tracker API", version="0.3.0")
+app = FastAPI(title="Activity Load Tracker API", version="0.4.0")
 
 
 @app.on_event("startup")
@@ -33,17 +41,23 @@ def _iter_days(start: date, end: date) -> Generator[date, None, None]:
         current += timedelta(days=1)
 
 
-def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
-    """
-    Recompute load metrics from `from_date` to the latest known workout day
-    for a specific user.
+def _fatigue_level_from_tsb(tsb: float) -> str:
+    if tsb <= -20:
+        return "high"
+    if tsb <= -5:
+        return "moderate"
+    return "low"
 
-    Important: we calculate metrics for every calendar day in range, including
-    rest days where TSS=0, to keep ATL/CTL/TSB mathematically consistent.
-    """
-    latest_workout_date = db.scalar(
-        select(func.max(Workout.workout_date)).where(Workout.user_id == user_id)
-    )
+
+def _ensure_user(db: Session, user_id: int) -> None:
+    user = db.get(User, user_id)
+    if user is None:
+        db.add(User(id=user_id))
+        db.flush()
+
+
+def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
+    latest_workout_date = db.scalar(select(func.max(Workout.workout_date)).where(Workout.user_id == user_id))
     if latest_workout_date is None:
         return
 
@@ -67,18 +81,32 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
     ).all()
     day_tss_map = {row[0]: float(row[1]) for row in day_tss_rows}
 
-    existing_metrics_rows = db.execute(
-        select(DailyMetrics).where(
-            DailyMetrics.user_id == user_id,
-            DailyMetrics.metric_date >= from_date,
-            DailyMetrics.metric_date <= latest_workout_date,
-        )
-    ).scalars()
-    existing_metrics_by_date = {metric.metric_date: metric for metric in existing_metrics_rows}
+    existing_metrics_by_date = {
+        metric.metric_date: metric
+        for metric in db.execute(
+            select(DailyMetrics).where(
+                DailyMetrics.user_id == user_id,
+                DailyMetrics.metric_date >= from_date,
+                DailyMetrics.metric_date <= latest_workout_date,
+            )
+        ).scalars()
+    }
+
+    existing_status_by_date = {
+        status.status_date: status
+        for status in db.execute(
+            select(DailyStatus).where(
+                DailyStatus.user_id == user_id,
+                DailyStatus.status_date >= from_date,
+                DailyStatus.status_date <= latest_workout_date,
+            )
+        ).scalars()
+    }
 
     for metric_day in _iter_days(from_date, latest_workout_date):
         day_tss = day_tss_map.get(metric_day, 0.0)
         atl, ctl, tsb, readiness = calculate_metrics(prev_atl=prev_atl, prev_ctl=prev_ctl, today_tss=day_tss)
+        fatigue_level = _fatigue_level_from_tsb(tsb)
 
         metric = existing_metrics_by_date.get(metric_day)
         if metric:
@@ -100,6 +128,22 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
                 )
             )
 
+        status = existing_status_by_date.get(metric_day)
+        if status:
+            status.readiness_score = readiness
+            status.tsb = tsb
+            status.fatigue_level = fatigue_level
+        else:
+            db.add(
+                DailyStatus(
+                    user_id=user_id,
+                    status_date=metric_day,
+                    readiness_score=readiness,
+                    fatigue_level=fatigue_level,
+                    tsb=tsb,
+                )
+            )
+
         prev_atl, prev_ctl = atl, ctl
 
 
@@ -111,11 +155,7 @@ def health() -> dict[str, str]:
 @app.post("/workouts", response_model=WorkoutRead, status_code=201)
 def create_workout(payload: WorkoutCreate, db: Session = Depends(get_db)) -> Workout:
     try:
-        user = db.get(User, payload.user_id)
-        if user is None:
-            user = User(id=payload.user_id)
-            db.add(user)
-            db.flush()
+        _ensure_user(db, payload.user_id)
 
         workout = Workout(user_id=payload.user_id, workout_date=payload.workout_date, tss=payload.tss)
         db.add(workout)
@@ -129,6 +169,25 @@ def create_workout(payload: WorkoutCreate, db: Session = Depends(get_db)) -> Wor
     except Exception:
         db.rollback()
         raise
+
+
+@app.get("/workouts", response_model=list[WorkoutRead])
+def list_workouts(
+    user_id: int = Query(..., gt=0),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[Workout]:
+    if start and end and start > end:
+        raise HTTPException(status_code=400, detail="start must be less than or equal to end")
+
+    query = select(Workout).where(Workout.user_id == user_id)
+    if start:
+        query = query.where(Workout.workout_date >= start)
+    if end:
+        query = query.where(Workout.workout_date <= end)
+    query = query.order_by(Workout.workout_date.asc(), Workout.created_at.asc())
+    return list(db.scalars(query).all())
 
 
 @app.get("/metrics", response_model=list[DailyMetricsRead])
@@ -160,3 +219,71 @@ def get_metric(metric_date: date, user_id: int = Query(..., gt=0), db: Session =
     if not metric:
         raise HTTPException(status_code=404, detail="Metric for date not found")
     return metric
+
+
+@app.get("/daily-status", response_model=list[DailyStatusRead])
+def list_daily_status(
+    user_id: int = Query(..., gt=0),
+    start: date | None = Query(default=None),
+    end: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> list[DailyStatus]:
+    if start and end and start > end:
+        raise HTTPException(status_code=400, detail="start must be less than or equal to end")
+
+    query = select(DailyStatus).where(DailyStatus.user_id == user_id)
+    if start:
+        query = query.where(DailyStatus.status_date >= start)
+    if end:
+        query = query.where(DailyStatus.status_date <= end)
+    query = query.order_by(DailyStatus.status_date.asc())
+    return list(db.scalars(query).all())
+
+
+@app.get("/users/{user_id}/dashboard", response_model=DashboardRead)
+def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
+    latest_metric = db.scalar(
+        select(DailyMetrics)
+        .where(DailyMetrics.user_id == user_id)
+        .order_by(DailyMetrics.metric_date.desc())
+        .limit(1)
+    )
+    latest_status = db.scalar(
+        select(DailyStatus)
+        .where(DailyStatus.user_id == user_id)
+        .order_by(DailyStatus.status_date.desc())
+        .limit(1)
+    )
+    last_workout = db.scalar(
+        select(Workout)
+        .where(Workout.user_id == user_id)
+        .order_by(Workout.workout_date.desc(), Workout.created_at.desc())
+        .limit(1)
+    )
+
+    return DashboardRead(
+        user_id=user_id,
+        latest_metric=latest_metric,
+        latest_status=latest_status,
+        last_workout=last_workout,
+    )
+
+
+@app.post("/biometrics", response_model=BiometricsRead, status_code=201)
+def create_biometrics(payload: BiometricsCreate, db: Session = Depends(get_db)) -> Biometrics:
+    try:
+        _ensure_user(db, payload.user_id)
+        biometrics = Biometrics(
+            user_id=payload.user_id,
+            entry_date=payload.entry_date,
+            resting_hr=payload.resting_hr,
+            hrv=payload.hrv,
+            body_weight=payload.body_weight,
+        )
+        db.add(biometrics)
+        db.commit()
+        db.refresh(biometrics)
+        return biometrics
+    except Exception:
+        db.rollback()
+        raise
