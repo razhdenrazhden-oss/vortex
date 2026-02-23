@@ -1,0 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.card {
+  @apply rounded-2xl bg-slate-900/90 p-4 shadow-lg ring-1 ring-slate-800;
+}
