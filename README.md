@@ -220,7 +220,7 @@ curl -X POST https://<your-render-domain>/update-data
 
 
 ### Quick check for `127` on Render
-- `Procfile` теперь использует `gunicorn your_application.wsgi:application`, чтобы fallback-старт совпадал с дефолтным сценарием Render и не зависал на неверной точке входа.
+- `Procfile` использует ASGI-native запуск: `gunicorn app.main:app -k uvicorn.workers.UvicornWorker ...`, чтобы избежать 500 от WSGI-адаптации.
 - Добавлен fallback-модуль `your_application/wsgi.py`, чтобы даже при дефолтном `gunicorn your_application.wsgi` поднимался FastAPI через WSGI-адаптер.
 - Добавлен `runtime.txt` (`python-3.11.9`) для хостингов, которые читают версию Python из `runtime.txt`.
 - Если в логах видите `Running 'gunicorn your_application.wsgi'` и `gunicorn: command not found`, значит Render использует дефолтный Start Command. Пропишите вручную: `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` и сделайте redeploy.
@@ -240,3 +240,8 @@ curl -X POST https://<your-render-domain>/update-data
 
 
 > Примечание: чтобы снизить риск `502` при старте в разных рантаймах (uvicorn/gunicorn), background-loop по умолчанию отключён (`ENABLE_DAILY_SYNC_LOOP=false`). Ежедневное обновление выполняется через cron endpoint `/update-data`.
+
+
+### If you see `Internal Server Error` on Render
+- Проверьте, что Procfile/Start Command запускают ASGI-приложение через Uvicorn worker (`gunicorn app.main:app -k uvicorn.workers.UvicornWorker` или `python -m uvicorn ...`).
+- WSGI-only запуск для FastAPI может давать нестабильные 500 на части маршрутов.
