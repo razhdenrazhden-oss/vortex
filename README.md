@@ -166,6 +166,7 @@ Add these in **Render → Service → Environment**:
 - `SUPABASE_JWT_SECRET` = `<your-supabase-jwt-secret>`
 - `DATABASE_URL` = `<supabase-postgres-connection-url>`
 - `DB_SSLMODE` = `require`
+- `STARTUP_DB_INIT` = `false` (recommended on Render; prevents startup crash if DB is temporarily unavailable)
 - `STRAVA_CLIENT_ID` = `<strava-client-id>`
 - `STRAVA_CLIENT_SECRET` = `<strava-client-secret>`
 - `STRAVA_REDIRECT_URI` = `https://<your-render-domain>/auth/strava/callback`
@@ -231,3 +232,6 @@ curl -X POST https://<your-render-domain>/update-data
 - This means Render launched default `gunicorn your_application.wsgi`.
 - Repo now includes `your_application/wsgi.py` with `application` callable, so redeploy should boot correctly.
 - If still failing, clear build cache and verify latest commit is deployed.
+
+
+> Примечание: автосоздание таблиц на startup теперь отключено по умолчанию (`STARTUP_DB_INIT=false`) для устойчивого старта на Render.

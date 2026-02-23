@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import os
 from datetime import date, timedelta
 from typing import Generator
 
@@ -29,13 +31,20 @@ from app.schemas import (
     WorkoutUpdate,
 )
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Activity Load Tracker API", version="0.8.0")
 app.include_router(external_router)
 
 
 @app.on_event("startup")
 def startup() -> None:
-    Base.metadata.create_all(bind=engine)
+    auto_init = os.getenv("STARTUP_DB_INIT", "false").lower() in {"1", "true", "yes"}
+    if auto_init:
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Startup DB init failed; continuing without schema auto-create: %s", exc)
     asyncio.get_event_loop().create_task(_daily_sync_loop())
 
 
