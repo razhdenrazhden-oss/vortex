@@ -110,6 +110,13 @@ class ExternalActivity(Base):
     duration_min: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     elevation_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     workout_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    route_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    polyline: Mapped[str | None] = mapped_column(String(8192), nullable=True)
+    atl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ctl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tsb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    load_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    load_color: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 

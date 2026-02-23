@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchDailyStatus, fetchHeartStatus, postManualBiometrics } from './api';
+import { fetchDailyStatus, fetchHeartStatus, fetchUserActivities, fetchUserForm, postManualBiometrics } from './api';
 import CalendarView from './components/CalendarView';
 import ChartsPanel from './components/ChartsPanel';
 import HeartCard from './components/HeartCard';
@@ -8,57 +8,27 @@ import PlannedWorkoutCard from './components/PlannedWorkoutCard';
 import RecommendationCard from './components/RecommendationCard';
 import StatusCard from './components/StatusCard';
 import { useSwipeTabs } from './hooks/useSwipeTabs';
-import type { HeartAlert, LoadPoint, Recommendation, RecommendationType, StatusKind, WeeklyLoad, WorkoutPlan } from './types';
+import type { ActivityItem, HeartAlert, LoadPoint, Recommendation, RecommendationType, StatusKind, WeeklyLoad, WorkoutPlan } from './types';
 
 const mockWorkouts: WorkoutPlan[] = [
-  {
-    id: '1',
-    date: '2026-02-03',
-    distanceKm: 42,
-    elevationM: 480,
-    workoutType: 'endurance',
-    routes: [
-      { route_provider: 'Komoot', external_url: 'https://www.komoot.com/' },
-      { route_provider: 'Strava', external_url: 'https://www.strava.com/' },
-      { route_provider: 'Garmin', external_url: 'https://connect.garmin.com/' }
-    ]
-  },
-  {
-    id: '2',
-    date: '2026-02-09',
-    distanceKm: 28,
-    elevationM: 250,
-    workoutType: 'recovery',
-    routes: [{ route_provider: 'Strava', external_url: 'https://www.strava.com/' }]
-  },
-  {
-    id: '3',
-    date: '2026-02-14',
-    distanceKm: 65,
-    elevationM: 920,
-    workoutType: 'interval',
-    routes: [{ route_provider: 'Garmin', external_url: 'https://connect.garmin.com/' }]
-  }
+  { id: '1', date: '2026-02-20', distanceKm: 68, durationMin: 150, avgHr: 142, avgPower: 210, elevationM: 840, workoutType: 'endurance', color: '#22c55e', polyline: null, routes: [{ route_provider: 'Strava', external_url: 'https://www.strava.com/' }] }
 ];
 
-const mockLoad: LoadPoint[] = Array.from({ length: 10 }).map((_, i) => ({
-  date: `D${i + 1}`,
-  atl: 55 + i,
-  ctl: 48 + i * 0.8,
-  tsb: -8 + i,
-  state: i > 7 ? 'progress' : 'maintaining'
-}));
+const mockLoad: LoadPoint[] = [
+  { date: 'Mon', atl: 50, ctl: 70, tsb: 20, state: 'progress', color: '#22c55e' },
+  { date: 'Tue', atl: 55, ctl: 71, tsb: 16, state: 'maintaining', color: '#3b82f6' },
+  { date: 'Wed', atl: 62, ctl: 72, tsb: 10, state: 'maintaining', color: '#3b82f6' }
+];
 
 const mockWeekly: WeeklyLoad[] = [
-  { week: 'W1', mileage: 120, calories: 2300, steps: 64000, state: 'progress' },
-  { week: 'W2', mileage: 98, calories: 2100, steps: 59000, state: 'maintaining' },
-  { week: 'W3', mileage: 140, calories: 2900, steps: 70000, state: 'overreaching' }
+  { week: 'W1', mileage: 210, calories: 3900, steps: 63000, state: 'progress' },
+  { week: 'W2', mileage: 180, calories: 3500, steps: 60000, state: 'maintaining' }
 ];
 
 const mockRecommendations: Recommendation[] = [
-  { id: 'r1', type: 'progress', text: 'Progress block: add 1 threshold interval this week.' },
-  { id: 'r2', type: 'recovery', text: 'Recovery day tomorrow with easy spin 45 min.' },
-  { id: 'r3', type: 'power', text: 'Neuromuscular set: 6x15s seated sprint.' },
+  { id: 'r1', type: 'progress', text: 'Solid adaptation. Add one tempo block.' },
+  { id: 'r2', type: 'recovery', text: 'Keep tomorrow easy with Z1 spin.' },
+  { id: 'r3', type: 'power', text: 'Include 6x30s seated sprint.' },
   { id: 'r4', type: 'race prep', text: 'Race prep: include one long climb simulation.' }
 ];
 
@@ -71,6 +41,8 @@ export default function App() {
 
   const [formScore, setFormScore] = useState(65);
   const [statusKind, setStatusKind] = useState<StatusKind>('maintaining');
+  const [workouts, setWorkouts] = useState<WorkoutPlan[]>(mockWorkouts);
+  const [load, setLoad] = useState<LoadPoint[]>(mockLoad);
   const [heartSeries, setHeartSeries] = useState<Array<{ date: string; hr: number; hrv: number }>>([
     { date: 'Mon', hr: 58, hrv: 64 },
     { date: 'Tue', hr: 60, hrv: 59 },
@@ -89,34 +61,40 @@ export default function App() {
     const last = Number(localStorage.getItem(key) ?? 0);
     if (now - last < 24 * 60 * 60 * 1000) return;
 
-    Promise.all([fetchDailyStatus(userId), fetchHeartStatus(userId)])
-      .then(([status, heart]) => {
+    Promise.all([fetchDailyStatus(userId), fetchHeartStatus(userId), fetchUserActivities(), fetchUserForm()])
+      .then(([status, heart, activities, form]) => {
         const latest = status.length ? status[status.length - 1] : undefined;
         if (latest) {
           setFormScore(latest.readiness_score);
-          setStatusKind(
-            latest.tsb >= 5 ? 'progress' : latest.tsb >= -5 ? 'maintaining' : latest.tsb >= -15 ? 'overreaching' : 'detraining'
+          setStatusKind(latest.tsb >= 5 ? 'progress' : latest.tsb >= -5 ? 'maintaining' : latest.tsb >= -15 ? 'overreaching' : 'detraining');
+        }
+        if (activities.length) {
+          setWorkouts(
+            activities.map((a: ActivityItem, idx) => ({
+              id: `${a.source}-${idx}`,
+              date: a.date,
+              distanceKm: a.distance_km,
+              durationMin: a.duration_min,
+              avgHr: a.hr_bpm,
+              avgPower: a.power_w,
+              elevationM: a.elevation_m ?? 0,
+              workoutType: a.power_w && a.power_w > 250 ? 'interval' : a.distance_km >= 70 ? 'endurance' : 'recovery',
+              color: a.color ?? '#3b82f6',
+              polyline: a.route.polyline,
+              routes: a.route.url ? [{ route_provider: a.source, external_url: a.route.url }] : []
+            }))
           );
         }
-        setHeartSeries((prev) =>
-          prev.map((p, idx) => ({
-            ...p,
-            hr: heart.avg_hr ? Math.round(heart.avg_hr + (idx - 3) * 0.3) : p.hr,
-            hrv: heart.avg_hrv ? Math.round(heart.avg_hrv + (3 - idx) * 0.5) : p.hrv
-          }))
-        );
+        if (form.length) setLoad(form);
+        setHeartSeries((prev) => prev.map((p, idx) => ({ ...p, hr: heart.avg_hr ? Math.round(heart.avg_hr + (idx - 3) * 0.3) : p.hr, hrv: heart.avg_hrv ? Math.round(heart.avg_hrv + (3 - idx) * 0.5) : p.hrv })));
         localStorage.setItem(key, String(now));
       })
       .catch(() => undefined);
   }, []);
 
-  const filteredRecommendations = useMemo(
-    () => mockRecommendations.filter((r) => (filter === 'all' ? true : r.type === filter)),
-    [filter]
-  );
+  const filteredRecommendations = useMemo(() => mockRecommendations.filter((r) => (filter === 'all' ? true : r.type === filter)), [filter]);
 
   const irregularHeartPattern = heartSeries.some((p) => p.hr > 70 || p.hrv < 45);
-
   const heartAlert: HeartAlert = {
     show: irregularHeartPattern,
     title: 'Irregular pattern detected',
@@ -124,21 +102,14 @@ export default function App() {
   };
 
   const tabIndex = tabs.indexOf(activeTab);
-  const swipe = useSwipeTabs(
-    () => setActiveTab(tabs[Math.min(tabIndex + 1, tabs.length - 1)]),
-    () => setActiveTab(tabs[Math.max(tabIndex - 1, 0)])
-  );
+  const swipe = useSwipeTabs(() => setActiveTab(tabs[Math.min(tabIndex + 1, tabs.length - 1)]), () => setActiveTab(tabs[Math.max(tabIndex - 1, 0)]));
 
   return (
     <main className="mx-auto min-h-screen max-w-md space-y-4 p-3" {...swipe}>
       <header className="sticky top-0 z-10 rounded-xl bg-slate-950/85 p-2 backdrop-blur">
         <nav className="grid grid-cols-3 gap-2">
           {tabs.map((t) => (
-            <button
-              key={t}
-              onClick={() => setActiveTab(t)}
-              className={`rounded-lg py-2 text-sm capitalize ${activeTab === t ? 'bg-blue-600' : 'bg-slate-800'}`}
-            >
+            <button key={t} onClick={() => setActiveTab(t)} className={`rounded-lg py-2 text-sm capitalize ${activeTab === t ? 'bg-blue-600' : 'bg-slate-800'}`}>
               {t}
             </button>
           ))}
@@ -153,11 +124,7 @@ export default function App() {
           <div className="card">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Recommendations</h3>
-              <select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as RecommendationType | 'all')}
-                className="rounded bg-slate-800 px-2 py-1 text-xs"
-              >
+              <select value={filter} onChange={(e) => setFilter(e.target.value as RecommendationType | 'all')} className="rounded bg-slate-800 px-2 py-1 text-xs">
                 <option value="all">All</option>
                 <option value="progress">Progress</option>
                 <option value="recovery">Recovery</option>
@@ -165,24 +132,17 @@ export default function App() {
                 <option value="race prep">Race Prep</option>
               </select>
             </div>
-            <div className="space-y-2">
-              {filteredRecommendations.map((r) => (
-                <RecommendationCard key={r.id} type={r.type} text={r.text} />
-              ))}
-            </div>
+            <div className="space-y-2">{filteredRecommendations.map((r) => <RecommendationCard key={r.id} type={r.type} text={r.text} />)}</div>
           </div>
 
-          <PlannedWorkoutCard workout={mockWorkouts[0]} />
+          {workouts[0] && <PlannedWorkoutCard workout={workouts[0]} />}
         </section>
       )}
 
-      {activeTab === 'calendar' && <CalendarView workouts={mockWorkouts} />}
-      {activeTab === 'charts' && <ChartsPanel load={mockLoad} weekly={mockWeekly} />}
+      {activeTab === 'calendar' && <CalendarView workouts={workouts} />}
+      {activeTab === 'charts' && <ChartsPanel load={load} weekly={mockWeekly} />}
 
-      <button
-        onClick={() => setManualOpen(true)}
-        className="fixed bottom-4 right-4 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold shadow-xl"
-      >
+      <button onClick={() => setManualOpen(true)} className="fixed bottom-4 right-4 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold shadow-xl">
         + Manual Input
       </button>
 
@@ -190,13 +150,7 @@ export default function App() {
         open={manualOpen}
         onClose={() => setManualOpen(false)}
         onSubmit={async (payload) => {
-          await postManualBiometrics({
-            user_id: userId,
-            entry_date: new Date().toISOString().slice(0, 10),
-            hr: payload.hr,
-            lactate: payload.lactate,
-            power: payload.power
-          });
+          await postManualBiometrics({ user_id: userId, entry_date: new Date().toISOString().slice(0, 10), hr: payload.hr, lactate: payload.lactate, power: payload.power });
         }}
       />
     </main>

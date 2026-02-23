@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, timedelta
 from typing import Generator
 
@@ -12,7 +13,7 @@ from app.daily_status import readiness_from_tsb, upsert_daily_status
 from app.external_api import router as external_router, recompute_form_for_user
 from app.database import SessionLocal, engine
 from app.heart_analytics import HeartInput, determine_cardio_risk, heart_recommendations
-from app.models import Base, Biometrics, DailyMetrics, DailyStatus, HeartStatus, User, Workout
+from app.models import Base, Biometrics, DailyMetrics, DailyStatus, ExternalActivity, HeartStatus, User, Workout
 from app.schemas import (
     BiometricsCreate,
     BiometricsRead,
@@ -35,6 +36,24 @@ app.include_router(external_router)
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
+    asyncio.get_event_loop().create_task(_daily_sync_loop())
+
+
+
+
+async def _daily_sync_loop() -> None:
+    while True:
+        await asyncio.sleep(24 * 60 * 60)
+        db = SessionLocal()
+        try:
+            user_ids = [u[0] for u in db.execute(select(User.id)).all()]
+            for uid in user_ids:
+                recompute_form_for_user(db, uid)
+            db.commit()
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
 
 
 def get_db() -> Generator[Session, None, None]:

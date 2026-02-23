@@ -132,8 +132,15 @@ class CardioAnalyticsRead(BaseModel):
     recommendations: list[str]
 
 
+
+
+class RouteInfo(BaseModel):
+    url: str | None
+    polyline: str | None
+
+
 class ActivityRead(BaseModel):
-    activity_date: date
+    date: date
     source: str
     hr_bpm: float | None
     power_w: float | None
@@ -141,8 +148,12 @@ class ActivityRead(BaseModel):
     duration_min: float
     elevation_m: float | None
     workout_type: str | None
+    atl: float | None
+    ctl: float | None
+    tsb: float | None
+    color: str | None
+    route: RouteInfo
 
-    model_config = {"from_attributes": True}
 
 
 class FormPointRead(BaseModel):

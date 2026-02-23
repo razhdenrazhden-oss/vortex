@@ -27,12 +27,32 @@ export interface WorkoutRoute {
   external_url: string;
 }
 
+export interface ActivityItem {
+  date: string;
+  source: string;
+  hr_bpm: number | null;
+  power_w: number | null;
+  distance_km: number;
+  duration_min: number;
+  elevation_m: number | null;
+  atl: number | null;
+  ctl: number | null;
+  tsb: number | null;
+  color: string | null;
+  route: { url: string | null; polyline: string | null };
+}
+
 export interface WorkoutPlan {
   id: string;
   date: string;
   distanceKm: number;
+  durationMin?: number;
+  avgHr?: number | null;
+  avgPower?: number | null;
   elevationM: number;
   workoutType: 'endurance' | 'recovery' | 'interval' | 'race';
+  color?: string;
+  polyline?: string | null;
   routes: WorkoutRoute[];
 }
 
@@ -48,6 +68,7 @@ export interface LoadPoint {
   ctl: number;
   tsb: number;
   state: StatusKind;
+  color?: string;
 }
 
 export interface WeeklyLoad {
