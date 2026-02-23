@@ -74,6 +74,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `GET /daily-status?user_id=1`
 - `GET /daily-status?user_id=1&start=2026-01-01&end=2026-01-31`
 
+### Heart status
+- `GET /users/{id}/heart-status`
+
+Возвращает user-scoped кардио-статус за последнюю дату: `avg_hr`, `avg_hrv`, `cardio_risk_level`, `recommendations`.
+
 ### Dashboard
 - `GET /users/{id}/dashboard`
 
@@ -94,6 +99,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
   "user_id": 1,
   "entry_date": "2026-01-01",
   "hr": 52,
+  "hrv": 58,
   "lactate": 1.8,
   "glucose": 95,
   "steps": 10500

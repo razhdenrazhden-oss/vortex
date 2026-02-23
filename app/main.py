@@ -10,7 +10,8 @@ from app.calculations import calculate_metrics
 from app.cardio_analytics import CardioInput, cardio_recommendations, cardio_risk_level, compute_cardio_score
 from app.daily_status import readiness_from_tsb, upsert_daily_status
 from app.database import SessionLocal, engine
-from app.models import Base, Biometrics, DailyMetrics, DailyStatus, User, Workout
+from app.heart_analytics import HeartInput, determine_cardio_risk, heart_recommendations
+from app.models import Base, Biometrics, DailyMetrics, DailyStatus, HeartStatus, User, Workout
 from app.schemas import (
     BiometricsCreate,
     BiometricsRead,
@@ -18,6 +19,7 @@ from app.schemas import (
     DailyMetricsRead,
     DailyStatusRead,
     DashboardRead,
+    HeartStatusRead,
     UserCreate,
     UserRead,
     WorkoutCreate,
@@ -25,7 +27,7 @@ from app.schemas import (
     WorkoutUpdate,
 )
 
-app = FastAPI(title="Activity Load Tracker API", version="0.6.0")
+app = FastAPI(title="Activity Load Tracker API", version="0.7.0")
 
 
 @app.on_event("startup")
@@ -62,16 +64,70 @@ def _get_existing_workout(db: Session, workout_id: int) -> Workout:
     return workout
 
 
+def recompute_heart_status_for_date(db: Session, user_id: int, metric_day: date) -> None:
+    period_start = metric_day - timedelta(days=6)
+
+    avg_hr, avg_hrv = db.execute(
+        select(func.avg(Biometrics.hr), func.avg(Biometrics.hrv)).where(
+            Biometrics.user_id == user_id,
+            Biometrics.entry_date >= period_start,
+            Biometrics.entry_date <= metric_day,
+        )
+    ).one()
+
+    avg_tsb, high_fatigue_days = db.execute(
+        select(
+            func.avg(DailyStatus.tsb),
+            func.count(DailyStatus.id).filter(DailyStatus.fatigue_level == "high"),
+        ).where(
+            DailyStatus.user_id == user_id,
+            DailyStatus.status_date >= period_start,
+            DailyStatus.status_date <= metric_day,
+        )
+    ).one()
+
+    risk = determine_cardio_risk(
+        HeartInput(
+            avg_hr=float(avg_hr) if avg_hr is not None else None,
+            avg_hrv=float(avg_hrv) if avg_hrv is not None else None,
+            avg_tsb=float(avg_tsb) if avg_tsb is not None else None,
+            high_fatigue_days=int(high_fatigue_days or 0),
+        )
+    )
+    recs = heart_recommendations(risk)
+
+    existing = db.scalar(
+        select(HeartStatus)
+        .where(HeartStatus.user_id == user_id, HeartStatus.metric_date == metric_day)
+        .limit(1)
+    )
+    if existing:
+        existing.avg_hr = float(avg_hr) if avg_hr is not None else None
+        existing.avg_hrv = float(avg_hrv) if avg_hrv is not None else None
+        existing.cardio_risk_level = risk
+        existing.recommendations = recs
+    else:
+        db.add(
+            HeartStatus(
+                user_id=user_id,
+                metric_date=metric_day,
+                avg_hr=float(avg_hr) if avg_hr is not None else None,
+                avg_hrv=float(avg_hrv) if avg_hrv is not None else None,
+                cardio_risk_level=risk,
+                recommendations=recs,
+            )
+        )
+
+
 def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
     """Continuous, rest-day inclusive, user-scoped recomputation."""
     latest_workout_date = db.scalar(select(func.max(Workout.workout_date)).where(Workout.user_id == user_id))
     if latest_workout_date is None:
-        # No workouts left -> remove all derived rows for this user.
         db.query(DailyMetrics).filter(DailyMetrics.user_id == user_id).delete()
         db.query(DailyStatus).filter(DailyStatus.user_id == user_id).delete()
+        db.query(HeartStatus).filter(HeartStatus.user_id == user_id).delete()
         return
 
-    # Trim stale tail after a workout update/delete if latest date moved earlier.
     db.query(DailyMetrics).filter(
         DailyMetrics.user_id == user_id,
         DailyMetrics.metric_date > latest_workout_date,
@@ -79,6 +135,10 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
     db.query(DailyStatus).filter(
         DailyStatus.user_id == user_id,
         DailyStatus.status_date > latest_workout_date,
+    ).delete()
+    db.query(HeartStatus).filter(
+        HeartStatus.user_id == user_id,
+        HeartStatus.metric_date > latest_workout_date,
     ).delete()
 
     prior_metric = db.scalar(
@@ -159,6 +219,9 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
         if status.id is None:
             db.add(status)
 
+        # Heart status depends on latest 7d DailyStatus + Biometrics context.
+        recompute_heart_status_for_date(db, user_id=user_id, metric_day=metric_day)
+
         prev_atl, prev_ctl = atl, ctl
 
 
@@ -238,9 +301,7 @@ def delete_workout(workout_id: int, db: Session = Depends(get_db)) -> None:
     try:
         db.delete(workout)
         db.flush()
-
         recompute_metrics_from(db=db, user_id=user_id, from_date=recompute_from)
-
         db.commit()
         return None
     except Exception:
@@ -317,6 +378,21 @@ def list_daily_status(
     return list(db.scalars(query).all())
 
 
+@app.get("/users/{user_id}/heart-status", response_model=HeartStatusRead)
+def get_latest_heart_status(user_id: int, db: Session = Depends(get_db)) -> HeartStatus:
+    _get_existing_user(db, user_id)
+
+    heart = db.scalar(
+        select(HeartStatus)
+        .where(HeartStatus.user_id == user_id)
+        .order_by(HeartStatus.metric_date.desc())
+        .limit(1)
+    )
+    if not heart:
+        raise HTTPException(status_code=404, detail="Heart status not found")
+    return heart
+
+
 @app.get("/users/{user_id}/dashboard", response_model=DashboardRead)
 def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
     _get_existing_user(db, user_id)
@@ -331,6 +407,12 @@ def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
         select(DailyStatus)
         .where(DailyStatus.user_id == user_id)
         .order_by(DailyStatus.status_date.desc())
+        .limit(1)
+    )
+    latest_heart_status = db.scalar(
+        select(HeartStatus)
+        .where(HeartStatus.user_id == user_id)
+        .order_by(HeartStatus.metric_date.desc())
         .limit(1)
     )
     last_workout = db.scalar(
@@ -350,6 +432,7 @@ def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
         user_id=user_id,
         latest_metric=latest_metric,
         latest_status=latest_status,
+        latest_heart_status=latest_heart_status,
         last_workout=last_workout,
         latest_biometrics=latest_biometrics,
     )
@@ -413,11 +496,18 @@ def create_biometrics(payload: BiometricsCreate, db: Session = Depends(get_db)) 
             user_id=payload.user_id,
             entry_date=payload.entry_date,
             hr=payload.hr,
+            hrv=payload.hrv,
             lactate=payload.lactate,
             glucose=payload.glucose,
             steps=payload.steps,
         )
         db.add(biometrics)
+        db.flush()
+
+        latest_metric_date = db.scalar(select(func.max(DailyStatus.status_date)).where(DailyStatus.user_id == payload.user_id))
+        if latest_metric_date:
+            recompute_heart_status_for_date(db, user_id=payload.user_id, metric_day=latest_metric_date)
+
         db.commit()
         db.refresh(biometrics)
         return biometrics

@@ -25,8 +25,6 @@ class WorkoutCreate(BaseModel):
     tss: float = Field(gt=0, description="Training Stress Score")
 
 
-
-
 class WorkoutUpdate(BaseModel):
     tss: float | None = Field(default=None, gt=0, description="Training Stress Score")
     workout_date: date | None = None
@@ -70,17 +68,29 @@ class DailyStatusRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class HeartStatusRead(BaseModel):
+    user_id: int
+    metric_date: date
+    avg_hr: float | None
+    avg_hrv: float | None
+    cardio_risk_level: str
+    recommendations: list[str]
+
+    model_config = {"from_attributes": True}
+
+
 class BiometricsCreate(BaseModel):
     user_id: int = Field(gt=0)
     entry_date: date
     hr: float | None = Field(default=None, gt=0)
+    hrv: float | None = Field(default=None, gt=0)
     lactate: float | None = Field(default=None, gt=0)
     glucose: float | None = Field(default=None, gt=0)
     steps: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_any_metric_present(self) -> "BiometricsCreate":
-        if self.hr is None and self.lactate is None and self.glucose is None and self.steps is None:
+        if self.hr is None and self.hrv is None and self.lactate is None and self.glucose is None and self.steps is None:
             raise ValueError("At least one biometric field is required")
         return self
 
@@ -90,6 +100,7 @@ class BiometricsRead(BaseModel):
     user_id: int
     entry_date: date
     hr: float | None
+    hrv: float | None
     lactate: float | None
     glucose: float | None
     steps: float | None
@@ -102,6 +113,7 @@ class DashboardRead(BaseModel):
     user_id: int
     latest_metric: DailyMetricsRead | None
     latest_status: DailyStatusRead | None
+    latest_heart_status: HeartStatusRead | None
     last_workout: WorkoutRead | None
     latest_biometrics: BiometricsRead | None
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -63,7 +63,22 @@ class Biometrics(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     entry_date: Mapped[Date] = mapped_column(Date, nullable=False, index=True)
     hr: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hrv: Mapped[float | None] = mapped_column(Float, nullable=True)
     lactate: Mapped[float | None] = mapped_column(Float, nullable=True)
     glucose: Mapped[float | None] = mapped_column(Float, nullable=True)
     steps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class HeartStatus(Base):
+    __tablename__ = "heart_status"
+    __table_args__ = (UniqueConstraint("user_id", "metric_date", name="uq_heart_status_user_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    metric_date: Mapped[Date] = mapped_column(Date, nullable=False, index=True)
+    avg_hr: Mapped[float | None] = mapped_column(Float, nullable=True)
+    avg_hrv: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cardio_risk_level: Mapped[str] = mapped_column(String(32), nullable=False)
+    recommendations: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

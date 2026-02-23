@@ -103,7 +103,7 @@ def test_dashboard_workouts_and_biometrics_endpoints(client: TestClient):
 
     b = client.post(
         "/biometrics",
-        json={"user_id": user_id, "entry_date": "2026-01-03", "hr": 50, "glucose": 92, "steps": 11000},
+        json={"user_id": user_id, "entry_date": "2026-01-03", "hr": 50, "hrv": 62, "glucose": 92, "steps": 11000},
     )
     assert b.status_code == 201
 
@@ -111,6 +111,7 @@ def test_dashboard_workouts_and_biometrics_endpoints(client: TestClient):
     assert dashboard.status_code == 200
     body = dashboard.json()
     assert body["latest_status"] is not None
+    assert body["latest_heart_status"] is not None
     assert body["latest_biometrics"] is not None
 
 
@@ -149,3 +150,14 @@ def test_workout_delete_recomputes_and_cleans_when_last_removed(client: TestClie
     statuses = client.get("/daily-status", params={"user_id": user_id})
     assert metrics.status_code == 200 and metrics.json() == []
     assert statuses.status_code == 200 and statuses.json() == []
+
+
+def test_heart_status_endpoint(client: TestClient):
+    user_id = _create_user(client, "auth_heart")
+    client.post("/workouts", json={"user_id": user_id, "workout_date": "2026-01-03", "tss": 70})
+    client.post("/biometrics", json={"user_id": user_id, "entry_date": "2026-01-03", "hr": 64, "hrv": 55})
+
+    heart = client.get(f"/users/{user_id}/heart-status")
+    assert heart.status_code == 200
+    payload = heart.json()
+    assert payload["cardio_risk_level"] in {"Normal", "Slight Risk", "High Risk"}
