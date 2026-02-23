@@ -12,7 +12,7 @@
   - `readiness_score` в диапазоне 0..100
 - Заполняет отдельную таблицу `daily_status` для фронтенда:
   - `status_date`, `user_id`, `readiness_score`, `fatigue_level`, `tsb`
-- Сохраняет тренировки, метрики и биометрию в PostgreSQL.
+- Сохраняет тренировки, метрики и биометрию в PostgreSQL / Supabase Postgres.
 - Отдаёт данные через REST API.
 - Без авторизации и внешних интеграций.
 
@@ -29,8 +29,28 @@ API будет доступен на `http://localhost:8000`.
 ```bash
 pip install .
 export DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/activity_tracker
+export DB_SSLMODE=disable
 uvicorn app.main:app --reload
 ```
+
+## Supabase подключение
+
+Если вы уже связали проект с Supabase, можно использовать прямое подключение к Postgres:
+
+```bash
+export SUPABASE_DB_URL="postgresql+psycopg://postgres.<project_ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres"
+# или DATABASE_URL, если удобнее
+# export DATABASE_URL="..."
+
+# Для Supabase обычно нужен TLS
+export DB_SSLMODE=require
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Приоритет переменных подключения:
+1. `DATABASE_URL`
+2. `SUPABASE_DB_URL`
+3. локальный default URL
 
 ## API
 
