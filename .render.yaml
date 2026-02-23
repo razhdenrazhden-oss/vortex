@@ -4,8 +4,8 @@ services:
     runtime: python
     plan: starter
     rootDir: .
-    buildCommand: python3 -m pip install -r requirements.txt
-    startCommand: python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: python -m pip install -r requirements.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
@@ -33,6 +33,6 @@ cronJobs:
     schedule: "0 3 * * *"
     env: python
     plan: starter
-    buildCommand: python3 -m pip install -r requirements.txt
+    buildCommand: python -m pip install -r requirements.txt
     startCommand: >-
-      python3 -c "import os,urllib.request;url=(os.environ.get('RENDER_EXTERNAL_URL','').rstrip('/')+'/update-data');req=urllib.request.Request(url,method='POST');print(urllib.request.urlopen(req,timeout=30).read().decode())"
+      python scripts_render_sync.py

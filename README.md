@@ -153,8 +153,8 @@ Load-state colors for frontend:
 - **Type:** Web Service
 - **Runtime:** Python
 - **Python version:** `3.11`
-- **Build Command:** `python3 -m pip install -r requirements.txt`
-- **Start Command:** `python3 -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Build Command:** `python -m pip install -r requirements.txt`
+- **Start Command:** `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 Repository already contains ready-to-use Render config: **`.render.yaml`**.
 
@@ -183,7 +183,7 @@ Add these in **Render → Service → Environment**:
 ### 4) Daily refresh (optional cron)
 - В `.render.yaml` добавлен пример `cronJobs` для ежедневного обновления.
 - Cron вызывает `POST /update-data`, который запускает дневной sync/recompute.
-- В `cronJobs.startCommand` используется `python3 -c` + `urllib` (без `curl`), чтобы избежать Render error `127` (command not found).
+- В `cronJobs.startCommand` используется `python scripts_render_sync.py` (без `curl` и без inline shell), чтобы убрать риски `status 127` из-за resolution/quoting проблем.
 - Если endpoint закрыт сетью, используйте внутренний cron worker или private network call.
 
 ### 5) Post-deploy API checks
