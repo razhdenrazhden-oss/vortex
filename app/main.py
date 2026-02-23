@@ -540,8 +540,14 @@ def create_biometrics(payload: BiometricsCreate, db: Session = Depends(get_db)) 
 @app.post("/internal/sync-daily")
 def sync_daily_job(db: Session = Depends(get_db)) -> dict[str, int]:
     """Cron entrypoint: recompute form datasets once per day."""
-    user_ids = [u.id for u in db.query(User.id).all()]
+    user_ids = [row[0] for row in db.query(User.id).all()]
     for uid in user_ids:
         recompute_form_for_user(db, uid)
     db.commit()
     return {"processed_users": len(user_ids)}
+
+
+@app.post("/update-data")
+def update_data(db: Session = Depends(get_db)) -> dict[str, int]:
+    """Public cron-friendly alias for daily sync (Render Scheduled Job)."""
+    return sync_daily_job(db)

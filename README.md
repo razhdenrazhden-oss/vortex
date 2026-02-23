@@ -145,3 +145,68 @@ Load-state colors for frontend:
 - `progress` (green)
 - `maintaining` (blue)
 - `detraining` (gray)
+
+
+## Render Deployment (FastAPI Web Service)
+
+### 1) Create Web Service on Render
+- **Type:** Web Service
+- **Runtime:** Python
+- **Python version:** `3.11`
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+
+Repository already contains ready-to-use Render config: **`.render.yaml`**.
+
+### 2) Required Environment Variables (Render Dashboard)
+Add these in **Render → Service → Environment**:
+
+- `SUPABASE_URL` = `<your-supabase-url>`
+- `SUPABASE_ANON_KEY` = `<your-supabase-anon-key>`
+- `SUPABASE_JWT_SECRET` = `<your-supabase-jwt-secret>`
+- `DATABASE_URL` = `<supabase-postgres-connection-url>`
+- `DB_SSLMODE` = `require`
+- `STRAVA_CLIENT_ID` = `<strava-client-id>`
+- `STRAVA_CLIENT_SECRET` = `<strava-client-secret>`
+- `STRAVA_REDIRECT_URI` = `https://<your-render-domain>/auth/strava/callback`
+- `INTERVALS_API_TOKEN` = `<intervals-api-token>`
+
+> В репозитории не храните реальные ключи. Только placeholders.
+
+### 3) Deploy via Codex
+1. Commit & push changes (including `.render.yaml` and `requirements.txt`).
+2. In Render choose **New + → Blueprint** and select this repo.
+3. Render прочитает `.render.yaml` и создаст web service автоматически.
+4. Заполните env vars в Render UI (или через Render API).
+5. Запустите deploy.
+
+### 4) Daily refresh (optional cron)
+- В `.render.yaml` добавлен пример `cronJobs` для ежедневного обновления.
+- Cron вызывает `POST /update-data`, который запускает дневной sync/recompute.
+- Если endpoint закрыт сетью, используйте внутренний cron worker или private network call.
+
+### 5) Post-deploy API checks
+Проверка health:
+```bash
+curl https://<your-render-domain>/health
+```
+
+Проверка OAuth start URL:
+```bash
+curl -H "Authorization: Bearer <supabase-jwt-or-dev-token>"   https://<your-render-domain>/auth/strava
+```
+
+Проверка активностей пользователя:
+```bash
+curl -H "Authorization: Bearer <supabase-jwt-or-dev-token>"   "https://<your-render-domain>/user/activities?start_date=2026-01-01&end_date=2026-12-31"
+```
+
+Проверка form-series для графика:
+```bash
+curl -H "Authorization: Bearer <supabase-jwt-or-dev-token>"   https://<your-render-domain>/user/form
+```
+
+Проверка daily update endpoint:
+```bash
+curl -X POST https://<your-render-domain>/update-data
+```
