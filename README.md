@@ -4,7 +4,7 @@
 
 ## Что делает
 
-- Принимает тренировки (`TSS`) через REST.
+- Принимает тренировки (`TSS`) через REST с привязкой к `user_id`.
 - Считает дневные метрики:
   - `ATL` (Acute Training Load, tau=7)
   - `CTL` (Chronic Training Load, tau=42)
@@ -48,22 +48,25 @@ uvicorn app.main:app --reload
 
 `POST /workouts`
 
+`user_id` обязателен и определяет владельца тренировки.
+
 Пример body:
 
 ```json
 {
+  "user_id": 1,
   "workout_date": "2026-01-01",
   "tss": 85
 }
 ```
 
-После добавления пересчитываются дневные метрики начиная с `workout_date` до последнего дня с тренировками, включая дни отдыха (TSS=0).
+После добавления пересчитываются дневные метрики только для указанного `user_id`, начиная с `workout_date` до последнего дня с тренировками пользователя, включая дни отдыха (TSS=0).
 
 ### Получить метрики
 
-- `GET /metrics`
-- `GET /metrics?start_date=2026-01-01&end_date=2026-01-31` (если `start_date > end_date`, API вернёт `400`)
-- `GET /metrics/{metric_date}`
+- `GET /metrics?user_id=1`
+- `GET /metrics?user_id=1&start_date=2026-01-01&end_date=2026-01-31` (если `start_date > end_date`, API вернёт `400`)
+- `GET /metrics/{metric_date}?user_id=1`
 
 ## Формулы
 

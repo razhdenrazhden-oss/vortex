@@ -4,12 +4,14 @@ from pydantic import BaseModel, Field
 
 
 class WorkoutCreate(BaseModel):
+    user_id: int = Field(gt=0)
     workout_date: date
     tss: float = Field(gt=0, description="Training Stress Score")
 
 
 class WorkoutRead(BaseModel):
     id: int
+    user_id: int
     workout_date: date
     tss: float
     created_at: datetime
@@ -18,6 +20,7 @@ class WorkoutRead(BaseModel):
 
 
 class DailyMetricsRead(BaseModel):
+    user_id: int
     metric_date: date
     tss: float
     atl: float

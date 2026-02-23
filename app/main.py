@@ -7,10 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.calculations import calculate_metrics
 from app.database import SessionLocal, engine
-from app.models import Base, DailyMetrics, Workout
+from app.models import Base, DailyMetrics, User, Workout
 from app.schemas import DailyMetricsRead, WorkoutCreate, WorkoutRead
 
-app = FastAPI(title="Activity Load Tracker API", version="0.2.0")
+app = FastAPI(title="Activity Load Tracker API", version="0.3.0")
 
 
 @app.on_event("startup")
@@ -33,20 +33,23 @@ def _iter_days(start: date, end: date) -> Generator[date, None, None]:
         current += timedelta(days=1)
 
 
-def recompute_metrics_from(db: Session, from_date: date) -> None:
+def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
     """
-    Recompute load metrics from `from_date` to the latest known workout day.
+    Recompute load metrics from `from_date` to the latest known workout day
+    for a specific user.
 
     Important: we calculate metrics for every calendar day in range, including
     rest days where TSS=0, to keep ATL/CTL/TSB mathematically consistent.
     """
-    latest_workout_date = db.scalar(select(func.max(Workout.workout_date)))
+    latest_workout_date = db.scalar(
+        select(func.max(Workout.workout_date)).where(Workout.user_id == user_id)
+    )
     if latest_workout_date is None:
         return
 
     prior_metric = db.scalar(
         select(DailyMetrics)
-        .where(DailyMetrics.metric_date < from_date)
+        .where(DailyMetrics.user_id == user_id, DailyMetrics.metric_date < from_date)
         .order_by(DailyMetrics.metric_date.desc())
         .limit(1)
     )
@@ -55,13 +58,18 @@ def recompute_metrics_from(db: Session, from_date: date) -> None:
 
     day_tss_rows = db.execute(
         select(Workout.workout_date, func.sum(Workout.tss))
-        .where(Workout.workout_date >= from_date, Workout.workout_date <= latest_workout_date)
+        .where(
+            Workout.user_id == user_id,
+            Workout.workout_date >= from_date,
+            Workout.workout_date <= latest_workout_date,
+        )
         .group_by(Workout.workout_date)
     ).all()
     day_tss_map = {row[0]: float(row[1]) for row in day_tss_rows}
 
     existing_metrics_rows = db.execute(
         select(DailyMetrics).where(
+            DailyMetrics.user_id == user_id,
             DailyMetrics.metric_date >= from_date,
             DailyMetrics.metric_date <= latest_workout_date,
         )
@@ -82,6 +90,7 @@ def recompute_metrics_from(db: Session, from_date: date) -> None:
         else:
             db.add(
                 DailyMetrics(
+                    user_id=user_id,
                     metric_date=metric_day,
                     tss=day_tss,
                     atl=atl,
@@ -102,11 +111,17 @@ def health() -> dict[str, str]:
 @app.post("/workouts", response_model=WorkoutRead, status_code=201)
 def create_workout(payload: WorkoutCreate, db: Session = Depends(get_db)) -> Workout:
     try:
-        workout = Workout(workout_date=payload.workout_date, tss=payload.tss)
+        user = db.get(User, payload.user_id)
+        if user is None:
+            user = User(id=payload.user_id)
+            db.add(user)
+            db.flush()
+
+        workout = Workout(user_id=payload.user_id, workout_date=payload.workout_date, tss=payload.tss)
         db.add(workout)
         db.flush()
 
-        recompute_metrics_from(db=db, from_date=payload.workout_date)
+        recompute_metrics_from(db=db, user_id=payload.user_id, from_date=payload.workout_date)
 
         db.commit()
         db.refresh(workout)
@@ -118,6 +133,7 @@ def create_workout(payload: WorkoutCreate, db: Session = Depends(get_db)) -> Wor
 
 @app.get("/metrics", response_model=list[DailyMetricsRead])
 def list_metrics(
+    user_id: int = Query(..., gt=0),
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -125,7 +141,7 @@ def list_metrics(
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=400, detail="start_date must be less than or equal to end_date")
 
-    query = select(DailyMetrics)
+    query = select(DailyMetrics).where(DailyMetrics.user_id == user_id)
     if start_date:
         query = query.where(DailyMetrics.metric_date >= start_date)
     if end_date:
@@ -135,8 +151,12 @@ def list_metrics(
 
 
 @app.get("/metrics/{metric_date}", response_model=DailyMetricsRead)
-def get_metric(metric_date: date, db: Session = Depends(get_db)) -> DailyMetrics:
-    metric = db.scalar(select(DailyMetrics).where(DailyMetrics.metric_date == metric_date).limit(1))
+def get_metric(metric_date: date, user_id: int = Query(..., gt=0), db: Session = Depends(get_db)) -> DailyMetrics:
+    metric = db.scalar(
+        select(DailyMetrics)
+        .where(DailyMetrics.user_id == user_id, DailyMetrics.metric_date == metric_date)
+        .limit(1)
+    )
     if not metric:
         raise HTTPException(status_code=404, detail="Metric for date not found")
     return metric
