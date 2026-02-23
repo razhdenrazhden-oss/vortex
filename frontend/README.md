@@ -5,7 +5,7 @@
 ```bash
 cd frontend
 npm install
-npm run dev
+npm start
 ```
 
 Set API URL if needed:
@@ -29,3 +29,5 @@ export VITE_API_URL=http://localhost:8000
 - `PlannedWorkoutCard` supports `route_provider` + `external_url` for extensible routing services.
 - `HeartCard` includes HR zone legend/tooltips and a HeartAlert placeholder when no critical data is present.
 - Charts include unit hints for consistency (pts/km/kcal/steps).
+
+- `PlannedWorkoutCard` consumes `routes[]` with `{ route_provider, external_url }` for extensible integrations.

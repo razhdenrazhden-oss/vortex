@@ -11,9 +11,34 @@ import { useSwipeTabs } from './hooks/useSwipeTabs';
 import type { HeartAlert, LoadPoint, Recommendation, RecommendationType, StatusKind, WeeklyLoad, WorkoutPlan } from './types';
 
 const mockWorkouts: WorkoutPlan[] = [
-  { id: '1', date: '2026-02-03', distanceKm: 42, elevationM: 480, workoutType: 'endurance', route_provider: 'Komoot', external_url: 'https://www.komoot.com/' },
-  { id: '2', date: '2026-02-09', distanceKm: 28, elevationM: 250, workoutType: 'recovery', route_provider: 'Strava', external_url: 'https://www.strava.com/' },
-  { id: '3', date: '2026-02-14', distanceKm: 65, elevationM: 920, workoutType: 'interval', route_provider: 'Garmin', external_url: 'https://connect.garmin.com/' }
+  {
+    id: '1',
+    date: '2026-02-03',
+    distanceKm: 42,
+    elevationM: 480,
+    workoutType: 'endurance',
+    routes: [
+      { route_provider: 'Komoot', external_url: 'https://www.komoot.com/' },
+      { route_provider: 'Strava', external_url: 'https://www.strava.com/' },
+      { route_provider: 'Garmin', external_url: 'https://connect.garmin.com/' }
+    ]
+  },
+  {
+    id: '2',
+    date: '2026-02-09',
+    distanceKm: 28,
+    elevationM: 250,
+    workoutType: 'recovery',
+    routes: [{ route_provider: 'Strava', external_url: 'https://www.strava.com/' }]
+  },
+  {
+    id: '3',
+    date: '2026-02-14',
+    distanceKm: 65,
+    elevationM: 920,
+    workoutType: 'interval',
+    routes: [{ route_provider: 'Garmin', external_url: 'https://connect.garmin.com/' }]
+  }
 ];
 
 const mockLoad: LoadPoint[] = Array.from({ length: 10 }).map((_, i) => ({
@@ -95,7 +120,7 @@ export default function App() {
   const heartAlert: HeartAlert = {
     show: irregularHeartPattern,
     title: 'Irregular pattern detected',
-    message: 'Consider medical evaluation if this persists'
+    message: 'Irregular heart rate pattern detected. Consider medical evaluation if this persists.'
   };
 
   const tabIndex = tabs.indexOf(activeTab);

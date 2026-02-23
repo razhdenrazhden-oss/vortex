@@ -22,7 +22,7 @@ export default function HeartCard({
 }) {
   const showAlert = alert?.show ?? irregular;
   const alertTitle = alert?.title ?? 'Irregular pattern';
-  const alertText = alert?.message ?? 'Consider medical evaluation if this persists';
+  const alertText = alert?.message ?? 'Irregular heart rate pattern detected. Consider medical evaluation if this persists.';
 
   return (
     <section className={`card border ${showAlert ? 'border-red-500' : 'border-slate-700'}`}>
@@ -37,7 +37,7 @@ export default function HeartCard({
           <p className="text-sm text-red-400">{alertText}</p>
         </div>
       ) : (
-        <p className="mb-2 text-sm text-slate-400">HeartAlert placeholder: no critical signals detected.</p>
+        <p className="mb-2 text-sm text-slate-400">HeartAlert placeholder: no heart anomalies detected yet.</p>
       )}
 
       <div className="mb-2 flex flex-wrap gap-2 text-[11px] text-slate-300">

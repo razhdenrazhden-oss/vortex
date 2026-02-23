@@ -22,14 +22,18 @@ export interface HeartAlert {
   message: string;
 }
 
+export interface WorkoutRoute {
+  route_provider: string;
+  external_url: string;
+}
+
 export interface WorkoutPlan {
   id: string;
   date: string;
   distanceKm: number;
   elevationM: number;
   workoutType: 'endurance' | 'recovery' | 'interval' | 'race';
-  route_provider: string;
-  external_url: string;
+  routes: WorkoutRoute[];
 }
 
 export interface Recommendation {
