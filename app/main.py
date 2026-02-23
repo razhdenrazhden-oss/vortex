@@ -3,6 +3,7 @@ from typing import Generator
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.calculations import calculate_metrics
@@ -14,11 +15,13 @@ from app.schemas import (
     DailyMetricsRead,
     DailyStatusRead,
     DashboardRead,
+    UserCreate,
+    UserRead,
     WorkoutCreate,
     WorkoutRead,
 )
 
-app = FastAPI(title="Activity Load Tracker API", version="0.4.0")
+app = FastAPI(title="Activity Load Tracker API", version="0.5.0")
 
 
 @app.on_event("startup")
@@ -49,14 +52,18 @@ def _fatigue_level_from_tsb(tsb: float) -> str:
     return "low"
 
 
-def _ensure_user(db: Session, user_id: int) -> None:
+def _get_existing_user(db: Session, user_id: int) -> User:
     user = db.get(User, user_id)
     if user is None:
-        db.add(User(id=user_id))
-        db.flush()
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 
 def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
+    """
+    Keep PR#2 behavior: continuous daily recomputation including rest days.
+    Fully user-scoped for SaaS isolation.
+    """
     latest_workout_date = db.scalar(select(func.max(Workout.workout_date)).where(Workout.user_id == user_id))
     if latest_workout_date is None:
         return
@@ -91,7 +98,6 @@ def recompute_metrics_from(db: Session, user_id: int, from_date: date) -> None:
             )
         ).scalars()
     }
-
     existing_status_by_date = {
         status.status_date: status
         for status in db.execute(
@@ -152,17 +158,36 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.post("/users", response_model=UserRead, status_code=201)
+def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
+    try:
+        user = User(
+            external_auth_id=payload.external_auth_id,
+            subscription_tier=payload.subscription_tier,
+            subscription_status=payload.subscription_status,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="User with external_auth_id already exists") from exc
+
+
+@app.get("/users/{user_id}", response_model=UserRead)
+def get_user(user_id: int, db: Session = Depends(get_db)) -> User:
+    return _get_existing_user(db, user_id)
+
+
 @app.post("/workouts", response_model=WorkoutRead, status_code=201)
 def create_workout(payload: WorkoutCreate, db: Session = Depends(get_db)) -> Workout:
+    _get_existing_user(db, payload.user_id)
     try:
-        _ensure_user(db, payload.user_id)
-
         workout = Workout(user_id=payload.user_id, workout_date=payload.workout_date, tss=payload.tss)
         db.add(workout)
         db.flush()
-
         recompute_metrics_from(db=db, user_id=payload.user_id, from_date=payload.workout_date)
-
         db.commit()
         db.refresh(workout)
         return workout
@@ -242,6 +267,8 @@ def list_daily_status(
 
 @app.get("/users/{user_id}/dashboard", response_model=DashboardRead)
 def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
+    _get_existing_user(db, user_id)
+
     latest_metric = db.scalar(
         select(DailyMetrics)
         .where(DailyMetrics.user_id == user_id)
@@ -260,25 +287,33 @@ def get_dashboard(user_id: int, db: Session = Depends(get_db)) -> DashboardRead:
         .order_by(Workout.workout_date.desc(), Workout.created_at.desc())
         .limit(1)
     )
+    latest_biometrics = db.scalar(
+        select(Biometrics)
+        .where(Biometrics.user_id == user_id)
+        .order_by(Biometrics.entry_date.desc(), Biometrics.created_at.desc())
+        .limit(1)
+    )
 
     return DashboardRead(
         user_id=user_id,
         latest_metric=latest_metric,
         latest_status=latest_status,
         last_workout=last_workout,
+        latest_biometrics=latest_biometrics,
     )
 
 
 @app.post("/biometrics", response_model=BiometricsRead, status_code=201)
 def create_biometrics(payload: BiometricsCreate, db: Session = Depends(get_db)) -> Biometrics:
+    _get_existing_user(db, payload.user_id)
     try:
-        _ensure_user(db, payload.user_id)
         biometrics = Biometrics(
             user_id=payload.user_id,
             entry_date=payload.entry_date,
-            resting_hr=payload.resting_hr,
-            hrv=payload.hrv,
-            body_weight=payload.body_weight,
+            hr=payload.hr,
+            lactate=payload.lactate,
+            glucose=payload.glucose,
+            steps=payload.steps,
         )
         db.add(biometrics)
         db.commit()

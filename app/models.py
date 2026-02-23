@@ -12,6 +12,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    external_auth_id: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
+    subscription_tier: Mapped[str] = mapped_column(String(32), nullable=False, default="free")
+    subscription_status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
 
@@ -59,7 +62,8 @@ class Biometrics(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     entry_date: Mapped[Date] = mapped_column(Date, nullable=False, index=True)
-    resting_hr: Mapped[float | None] = mapped_column(Float, nullable=True)
-    hrv: Mapped[float | None] = mapped_column(Float, nullable=True)
-    body_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hr: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lactate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    glucose: Mapped[float | None] = mapped_column(Float, nullable=True)
+    steps: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
